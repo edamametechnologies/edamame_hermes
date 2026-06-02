@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes EDAMAME Control Center</title>
+    <style id="host-fonts"></style>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: var(--color-background-primary, #081317);
+        --bg-elevated: var(--color-background-secondary, rgba(8, 19, 23, 0.86));
+        --text: var(--color-text-primary, #f5fbf8);
+        --text-muted: var(--color-text-secondary, #b7cdc3);
+        --border: rgba(125, 220, 111, 0.18);
+        --border-strong: rgba(255, 255, 255, 0.08);
+        --accent: #7ddc6f;
+        --accent-strong: #a4f08d;
+        --accent-soft: rgba(125, 220, 111, 0.14);
+        --accent-secondary: #5cc8ff;
+        --surface: rgba(255, 255, 255, 0.04);
+        --surface-strong: rgba(255, 255, 255, 0.07);
+        --success: var(--color-success, #7ddc6f);
+        --warning: var(--color-warning, #f7c96f);
+        --danger: var(--color-danger, #ff7f8f);
+        --radius: var(--border-radius-large, 24px);
+        --radius-sm: 18px;
+        --radius-xs: 12px;
+        --shadow: 0 28px 60px rgba(5, 12, 18, 0.34);
+        font-family: var(--font-sans, Inter, system-ui, sans-serif);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background:
+          radial-gradient(circle at top left, rgba(125, 220, 111, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(92, 200, 255, 0.14), transparent 34%),
+          linear-gradient(180deg, rgba(8, 19, 23, 0.22), rgba(8, 19, 23, 0.08));
+        color: var(--text);
+      }
+
+      body {
+        padding: 16px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+      }
+
+      .shell {
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(180deg, rgba(8, 19, 23, 0.96), rgba(8, 19, 23, 0.9));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(140deg, rgba(125, 220, 111, 0.08), transparent 42%),
+          radial-gradient(circle at top right, rgba(92, 200, 255, 0.12), transparent 34%);
+        pointer-events: none;
+      }
+
+      .hero {
+        position: relative;
+        padding: 24px 24px 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .hero-layout {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
+        align-items: start;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(125, 220, 111, 0.22);
+        background: rgba(125, 220, 111, 0.1);
+        color: var(--accent-strong);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 14px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(24px, 3vw, 32px);
+        line-height: 1.16;
+        letter-spacing: -0.02em;
+      }
+
+      .summary {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .hero-panel {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-sm);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+        padding: 16px;
+      }
+
+      .hero-stat-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 14px;
+      }
+
+      .hero-stat {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 12px;
+      }
+
+      .hero-stat-label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .hero-stat strong {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        padding: 0 24px 24px;
+      }
+
+      .card {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+        padding: 16px;
+      }
+
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 15px;
+        line-height: 1.4;
+      }
+
+      .card-intro {
+        margin: 0 0 14px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--text-muted);
+      }
+
+      .card-intro a,
+      .help-text a {
+        color: var(--accent-strong);
+        text-decoration: none;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--warning);
+        flex: 0 0 auto;
+      }
+
+      .status-dot.ok {
+        background: var(--success);
+      }
+
+      .status-dot.error {
+        background: var(--danger);
+      }
+
+      .metrics {
+        display: grid;
+        gap: 8px;
+      }
+
+      .metric {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--text-muted);
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .metric:first-child {
+        padding-top: 0;
+        border-top: 0;
+      }
+
+      .metric strong {
+        color: var(--text);
+        font-weight: 600;
+        text-align: right;
+      }
+
+      .help-text {
+        margin: 8px 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--text-muted);
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .field label {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .field input,
+      .field select {
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        background: rgba(7, 17, 21, 0.72);
+        color: var(--text);
+        font: inherit;
+        padding: 10px 12px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        transition:
+          transform 120ms ease,
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+
+      button.primary {
+        background:
+          linear-gradient(135deg, rgba(125, 220, 111, 0.24), rgba(92, 200, 255, 0.2));
+        border-color: rgba(125, 220, 111, 0.32);
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        border-color: rgba(125, 220, 111, 0.28);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .checks,
+      .steps,
+      .commands {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding-left: 18px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .check {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .check:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .check-body {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .check-name {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .check-detail {
+        margin: 6px 0 0;
+        font-size: 12px;
+        color: var(--text-muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        background: rgba(7, 17, 21, 0.72);
+        padding: 10px 12px;
+      }
+
+      .callout {
+        border: 1px solid rgba(255, 127, 143, 0.28);
+        background: rgba(91, 21, 33, 0.7);
+        color: #ffd9de;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.5;
+        margin: 0 24px 18px;
+      }
+
+      code {
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+        font-size: 12px;
+      }
+
+      .mono-block {
+        display: grid;
+        gap: 8px;
+      }
+
+      .mono-block code {
+        display: block;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        background: rgba(7, 17, 21, 0.72);
+        color: var(--text);
+        padding: 10px 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .section-gap {
+        height: 12px;
+      }
+
+      @media (max-width: 920px) {
+        .hero-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        body {
+          padding: 12px;
+        }
+
+        .hero,
+        .grid {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .toolbar,
+        .actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .hero-stat-grid {
+          grid-template-columns: 1fr;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="shell">
+        <div class="hero">
+          <h1>Hermes EDAMAME Control Center</h1>
+          <p class="summary">Loading setup and runtime status...</p>
+        </div>
+      </div>
+    </main>
+
+    <script type="module">
+      const CONTROL_TOOL = "edamame_hermes_control_center";
+      const STATUS_TOOL = "edamame_hermes_control_center_refresh";
+      const PAIRING_TOOL = "edamame_hermes_control_center_apply_pairing";
+      const HOST_ACTION_TOOL = "edamame_hermes_control_center_run_host_action";
+      const REFRESH_NOW_TOOL = "edamame_hermes_control_center_refresh_now";
+      const APP_PAIRING_TOOL = "edamame_hermes_control_center_request_app_pairing";
+
+      const appState = {
+        payload: null,
+        hostContext: null,
+        error: null,
+        busy: null,
+        pollHandle: null,
+        pending: new Map(),
+        nextRequestId: 1,
+        draft: {
+          hostKind: "edamame_app",
+          endpoint: "http://127.0.0.1:3000/mcp",
+          psk: "",
+        },
+      };
+
+      function sendNotification(method, params = {}) {
+        window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+      }
+
+      function sendRequest(method, params = {}) {
+        const id = appState.nextRequestId++;
+        window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+        return new Promise((resolve, reject) => {
+          appState.pending.set(id, { resolve, reject });
+        });
+      }
+
+      function parseToolPayload(result) {
+        if (!result) return null;
+        if (result.structuredContent !== undefined) return result.structuredContent;
+
+        const textParts = Array.isArray(result.content)
+          ? result.content
+              .filter((item) => item && item.type === "text" && typeof item.text === "string")
+              .map((item) => item.text)
+          : [];
+
+        if (textParts.length === 0) return null;
+        const joined = textParts.join("\n").trim();
+        if (!joined) return null;
+
+        try {
+          return JSON.parse(joined);
+        } catch (_error) {
+          return { summaryLine: joined };
+        }
+      }
+
+      function formatDate(value) {
+        if (!value) return "Never";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString();
+      }
+
+      function yesNo(value) {
+        return value ? "Yes" : "No";
+      }
+
+      function nullableYesNo(value) {
+        if (value === null || value === undefined) return "Unknown";
+        return yesNo(value);
+      }
+
+      function hostKindLabel(value) {
+        if (value === "edamame_posture") return "EDAMAME Posture CLI";
+        if (value === "edamame_app") return "EDAMAME Security App";
+        return value ? String(value) : "Unknown host";
+      }
+
+      function busyLabel(value) {
+        switch (value) {
+          case "status":
+            return "Refreshing status";
+          case "refresh-now":
+            return "Exporting intent to EDAMAME";
+          case "pairing":
+            return "Saving local pairing";
+          case "app-pairing":
+            return "Requesting pairing from app (approve in EDAMAME)";
+          case "host-generate_and_start":
+            return "Generating PSK and starting local host";
+          case "host-start":
+            return "Starting local host";
+          case "host-stop":
+            return "Stopping local host";
+          default:
+            return String(value || "Working");
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function jsonSummary(value) {
+        if (value === null || value === undefined || value === "") return "";
+        if (typeof value === "string") return value;
+        try {
+          return JSON.stringify(value, null, 2);
+        } catch (_error) {
+          return String(value);
+        }
+      }
+
+      function applyHostContext(hostContext) {
+        appState.hostContext = hostContext || null;
+        const variables = hostContext?.styles?.variables || {};
+        for (const [key, value] of Object.entries(variables)) {
+          if (typeof value === "string" && key.startsWith("--")) {
+            document.documentElement.style.setProperty(key, value);
+          }
+        }
+
+        if (typeof hostContext?.theme === "string") {
+          document.documentElement.dataset.theme = hostContext.theme;
+        }
+
+        const fonts = hostContext?.styles?.css?.fonts || "";
+        document.getElementById("host-fonts").textContent = fonts;
+      }
+
+      function syncDraftFromPayload(payload) {
+        if (!payload) return;
+        appState.draft.hostKind = payload.config?.hostKind || appState.draft.hostKind;
+        appState.draft.endpoint = payload.config?.endpoint || appState.draft.endpoint;
+      }
+
+      function setPayload(payload) {
+        if (!payload) return;
+        appState.payload = payload;
+        appState.error = null;
+        syncDraftFromPayload(payload);
+        render();
+      }
+
+      async function callServerTool(name, args = {}) {
+        const response = await sendRequest("tools/call", {
+          name,
+          arguments: args,
+        });
+        return parseToolPayload(response);
+      }
+
+      async function refreshStatus() {
+        appState.busy = "status";
+        appState.error = null;
+        render();
+        try {
+          const payload = await callServerTool(STATUS_TOOL, {});
+          setPayload(payload);
+        } catch (error) {
+          appState.error = String(error?.message || error);
+          render();
+        } finally {
+          appState.busy = null;
+          render();
+        }
+      }
+
+      async function refreshNow() {
+        appState.busy = "refresh-now";
+        appState.error = null;
+        render();
+        try {
+          const payload = await callServerTool(REFRESH_NOW_TOOL, {});
+          setPayload(payload);
+        } catch (error) {
+          appState.error = String(error?.message || error);
+          render();
+        } finally {
+          appState.busy = null;
+          render();
+        }
+      }
+
+      async function savePairing() {
+        const psk = String(appState.draft.psk || "").trim();
+        if (!psk) {
+          appState.error = "Paste the MCP PSK from EDAMAME before saving local pairing.";
+          render();
+          return;
+        }
+
+        appState.busy = "pairing";
+        appState.error = null;
+        render();
+        try {
+          const payload = await callServerTool(PAIRING_TOOL, {
+            host_kind: appState.draft.hostKind,
+            endpoint: appState.draft.endpoint,
+            psk,
+          });
+          appState.draft.psk = "";
+          setPayload(payload);
+        } catch (error) {
+          appState.error = String(error?.message || error);
+          render();
+        } finally {
+          appState.busy = null;
+          render();
+        }
+      }
+
+      async function requestAppPairing() {
+        appState.busy = "app-pairing";
+        appState.error = null;
+        render();
+        try {
+          const payload = await callServerTool(APP_PAIRING_TOOL, {
+            endpoint: appState.draft.endpoint,
+          });
+          setPayload(payload);
+        } catch (error) {
+          const message = String(error?.message || error);
+          if (message.includes("pairing_rejected")) {
+            appState.error = "Pairing request was rejected in the app.";
+          } else if (message.includes("pairing_timeout") || message.includes("pairing_expired")) {
+            appState.error = "Pairing request timed out. Try again and approve in the app within 60 seconds.";
+          } else {
+            appState.error = message;
+          }
+          render();
+        } finally {
+          appState.busy = null;
+          render();
+        }
+      }
+
+      async function runHostAction(action) {
+        appState.busy = `host-${action}`;
+        appState.error = null;
+        render();
+        try {
+          const payload = await callServerTool(HOST_ACTION_TOOL, {
+            action,
+            host_kind: appState.draft.hostKind,
+            endpoint: appState.draft.endpoint,
+            psk: String(appState.draft.psk || "").trim() || undefined,
+          });
+          appState.draft.psk = "";
+          setPayload(payload);
+        } catch (error) {
+          appState.error = String(error?.message || error);
+          render();
+        } finally {
+          appState.busy = null;
+          render();
+        }
+      }
+
+      function bindInput(id, key, options = {}) {
+        const element = document.getElementById(id);
+        if (!element) return;
+        const rerender = options.rerender === true;
+        const handler = (event) => {
+          appState.draft[key] = event.target.value;
+          if (rerender) render();
+        };
+        element.addEventListener("input", handler);
+        element.addEventListener("change", handler);
+      }
+
+      function bindActions() {
+        const saveButton = document.getElementById("save-pairing");
+        if (saveButton) {
+          saveButton.addEventListener("click", () => {
+            void savePairing();
+          });
+        }
+
+        const refreshButton = document.getElementById("refresh-status");
+        if (refreshButton) {
+          refreshButton.addEventListener("click", () => {
+            void refreshStatus();
+          });
+        }
+
+        const refreshNowButton = document.getElementById("refresh-now");
+        if (refreshNowButton) {
+          refreshNowButton.addEventListener("click", () => {
+            void refreshNow();
+          });
+        }
+
+        const appPairButton = document.getElementById("request-app-pairing");
+        if (appPairButton) {
+          appPairButton.addEventListener("click", () => {
+            void requestAppPairing();
+          });
+        }
+
+        const autoPairButton = document.getElementById("auto-pair");
+        if (autoPairButton) {
+          autoPairButton.addEventListener("click", () => {
+            void runHostAction("generate_and_start");
+          });
+        }
+
+        const startHostButton = document.getElementById("start-host");
+        if (startHostButton) {
+          startHostButton.addEventListener("click", () => {
+            void runHostAction("start");
+          });
+        }
+
+        const stopHostButton = document.getElementById("stop-host");
+        if (stopHostButton) {
+          stopHostButton.addEventListener("click", () => {
+            void runHostAction("stop");
+          });
+        }
+
+        bindInput("host-kind", "hostKind", { rerender: true });
+        bindInput("endpoint", "endpoint");
+        bindInput("psk", "psk");
+      }
+
+      function renderChecks(checks) {
+        if (!Array.isArray(checks) || checks.length === 0) {
+          return "<p class=\"help-text\">No health checks available yet.</p>";
+        }
+
+        return checks
+          .map((check) => {
+            const dotClass = check.ok ? "status-dot ok" : "status-dot error";
+            const detail = jsonSummary(check.detail);
+            return `
+              <div class="check">
+                <span class="${dotClass}"></span>
+                <div class="check-body">
+                  <span class="check-name">${escapeHtml(check.name)}</span>
+                  <pre class="check-detail">${escapeHtml(detail || "No detail")}</pre>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function renderCommands(commands) {
+        if (!Array.isArray(commands) || commands.length === 0) {
+          return "<p class=\"help-text\">No CLI commands are required for this host path.</p>";
+        }
+
+        return `
+          <div class="mono-block">
+            ${commands.map((command) => `<code>${escapeHtml(command)}</code>`).join("")}
+          </div>
+        `;
+      }
+
+      function render() {
+        const payload = appState.payload || {};
+        const posture = payload.posture || {};
+        const health = payload.health || { checks: [] };
+        const pairing = payload.pairing || { configured: false, instructions: { steps: [], commands: [] } };
+        const hostController = payload.hostController || {};
+        const serviceManager = hostController.serviceManager || {};
+        const extrapolator = payload.extrapolator || {};
+        const refreshResult = payload.refreshResult || null;
+        const hostActionResult = payload.hostActionResult || null;
+        const selectedHostKind = payload.config?.hostKind || appState.draft.hostKind;
+        const hostProductName = hostKindLabel(selectedHostKind);
+        const liveAuthFailed =
+          Array.isArray(health.checks) &&
+          health.checks.some(
+            (check) =>
+              check &&
+              check.ok === false &&
+              (check.name === "mcp.authentication" ||
+                (check.name === "mcp.endpoint" &&
+                  check.detail &&
+                  typeof check.detail === "object" &&
+                  check.detail.reason === "edamame_mcp_auth_failed")),
+          );
+        const staleAuthFailed =
+          !health.ok &&
+          ((Array.isArray(extrapolator.lastReasons) &&
+            extrapolator.lastReasons.includes("edamame_mcp_auth_failed")) ||
+            (Array.isArray(refreshResult?.reasons) &&
+              refreshResult.reasons.includes("edamame_mcp_auth_failed")));
+        const authFailed = liveAuthFailed || staleAuthFailed;
+        const heroStatusLabel = authFailed
+          ? "Authentication failed"
+          : health.ok
+            ? "Status healthy"
+            : pairing.configured
+              ? "Pairing saved locally"
+              : "Pairing required";
+        const latestIntentExport = extrapolator.lastRunAt
+          ? formatDate(extrapolator.lastRunAt)
+          : "Not exported yet";
+        const postureVerdict = posture.verdict || "No verdict";
+        const hostPathSummary =
+          selectedHostKind === "edamame_posture"
+            ? "EDAMAME Posture CLI is the local host on Linux, CI, and agent workstations."
+            : "EDAMAME Security App is the local host on macOS and Windows workstations.";
+        const heroStatusClass = authFailed
+          ? "status-dot error"
+          : health.ok
+            ? "status-dot ok"
+            : pairing.configured
+              ? "status-dot"
+              : "status-dot error";
+        const busyStatus = appState.busy
+          ? `<span class="status-pill">Working: ${escapeHtml(busyLabel(appState.busy))}</span>`
+          : "";
+        const hostControllerStatusClass =
+          hostController.supported === false
+            ? "status-dot"
+            : hostController.available === false
+              ? "status-dot error"
+              : hostController.running === true
+                ? "status-dot ok"
+                : "status-dot";
+        const hostControllerStatusLabel =
+          hostController.supported === false
+            ? "Manual only"
+            : hostController.available === false
+              ? "CLI unavailable"
+              : hostController.running === true
+                ? "Running"
+                : hostController.running === false
+                  ? "Stopped"
+                  : "Unknown";
+        const pairingHelpText = pairing.actions?.appPairingSupported
+          ? "App pairing sends a request to the local EDAMAME app. Approve in the app and the credential is stored automatically."
+          : pairing.actions?.autoPairSupported
+            ? "Automatic Linux pairing generates a fresh PSK, starts the local EDAMAME host, and stores the credential locally without returning it in tool results."
+            : "The credential is stored only on this workstation and is not returned in tool results.";
+        const serviceManagerStatusClass =
+          serviceManager.applicable !== true
+            ? "status-dot"
+            : serviceManager.available === false
+              ? "status-dot error"
+              : serviceManager.unitLoaded === true &&
+                  serviceManager.enabled === true &&
+                  serviceManager.active === true &&
+                  serviceManager.wrapperPresent !== false &&
+                  serviceManager.configPresent !== false
+                ? "status-dot ok"
+                : "status-dot";
+        const serviceManagerStatusLabel =
+          serviceManager.applicable !== true
+            ? "Not applicable"
+            : serviceManager.available === false
+              ? "Unavailable"
+              : serviceManager.unitLoaded === true &&
+                  serviceManager.enabled === true &&
+                  serviceManager.active === true &&
+                  serviceManager.wrapperPresent !== false &&
+                  serviceManager.configPresent !== false
+                ? "Ready"
+                : "Needs attention";
+
+        document.getElementById("app").innerHTML = `
+          <div class="shell">
+            <div class="hero">
+              <div class="hero-layout">
+                <div>
+                  <h1>Hermes EDAMAME Control Center</h1>
+                  <p class="summary">
+                    Pair Hermes with a local EDAMAME host. <strong>Refresh status</strong> only reads the
+                    current pairing, engine, and model state. <strong>Export intent now</strong> reads recent
+                    Hermes activity, sends updated intent to EDAMAME, and then refreshes the result.
+                  </p>
+                  <div class="toolbar">
+                    <button id="refresh-status" ${appState.busy ? "disabled" : ""}>Refresh status</button>
+                    <button id="refresh-now" class="primary" ${appState.busy ? "disabled" : ""}>Export intent now</button>
+                  </div>
+                </div>
+                <aside class="hero-panel">
+                  <div class="status-row">
+                    <span class="status-pill"><span class="${heroStatusClass}"></span>${escapeHtml(heroStatusLabel)}</span>
+                    ${busyStatus}
+                  </div>
+                  <div class="hero-stat-grid">
+                    <div class="hero-stat">
+                      <span class="hero-stat-label">Current host</span>
+                      <strong>${escapeHtml(hostProductName)}</strong>
+                    </div>
+                    <div class="hero-stat">
+                      <span class="hero-stat-label">Last intent export</span>
+                      <strong>${escapeHtml(latestIntentExport)}</strong>
+                    </div>
+                    <div class="hero-stat">
+                      <span class="hero-stat-label">Live verdict</span>
+                      <strong>${escapeHtml(postureVerdict)}</strong>
+                    </div>
+                    <div class="hero-stat">
+                      <span class="hero-stat-label">Contributors</span>
+                      <strong>${escapeHtml(String(posture.contributorCount ?? 0))}</strong>
+                    </div>
+                  </div>
+                  <p class="help-text">${escapeHtml(payload.summaryLine || "Loading setup and runtime status...")}</p>
+                </aside>
+              </div>
+            </div>
+
+            ${appState.error ? `<div class="callout">${escapeHtml(appState.error)}</div>` : ""}
+
+            <div class="grid">
+              <section class="card">
+                <h2>Pair this workstation</h2>
+                <p class="card-intro">
+                  Choose the local EDAMAME product that exposes the MCP endpoint on this machine. macOS and
+                  Windows usually use the Security App. Linux can use the Posture CLI.
+                </p>
+                <div class="status-row">
+                  <span class="status-pill"><span class="${pairing.configured ? "status-dot ok" : "status-dot error"}"></span>${pairing.configured ? "Credential stored locally" : "Credential not stored yet"}</span>
+                </div>
+                <div class="field">
+                  <label for="host-kind">Local host</label>
+                  <select id="host-kind">
+                    <option value="edamame_app" ${appState.draft.hostKind === "edamame_app" ? "selected" : ""}>EDAMAME Security App</option>
+                    <option value="edamame_posture" ${appState.draft.hostKind === "edamame_posture" ? "selected" : ""}>EDAMAME Posture CLI</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="endpoint">Local MCP endpoint</label>
+                  <input id="endpoint" type="text" value="${escapeHtml(appState.draft.endpoint)}" />
+                </div>
+                <div class="field">
+                  <label for="psk">MCP credential (PSK or per-client token)</label>
+                  <input id="psk" type="password" value="${escapeHtml(appState.draft.psk)}" placeholder="Paste credential or use app pairing below" />
+                </div>
+                <div class="actions">
+                  ${
+                    pairing.actions?.appPairingSupported
+                      ? `<button id="request-app-pairing" class="primary" ${appState.busy ? "disabled" : ""}>Request pairing from app</button>`
+                      : ""
+                  }
+                  ${
+                    pairing.actions?.autoPairSupported
+                      ? `<button id="auto-pair" class="primary" ${appState.busy ? "disabled" : ""}>Generate PSK, start local host, and pair</button>`
+                      : ""
+                  }
+                  ${
+                    pairing.actions?.startSupported
+                      ? `<button id="start-host" ${appState.busy ? "disabled" : ""}>Start local host</button>`
+                      : ""
+                  }
+                  ${
+                    pairing.actions?.stopSupported
+                      ? `<button id="stop-host" ${appState.busy ? "disabled" : ""}>Stop local host</button>`
+                      : ""
+                  }
+                  <button id="save-pairing" ${appState.busy ? "disabled" : ""}>${pairing.actions?.autoPairSupported || pairing.actions?.appPairingSupported ? "Store credential manually" : "Store credential"}</button>
+                </div>
+                <p class="help-text">${escapeHtml(pairingHelpText)}</p>
+              </section>
+
+              <section class="card">
+                <h2>Local EDAMAME host</h2>
+                <p class="card-intro">${escapeHtml(hostPathSummary)}</p>
+                <div class="status-row">
+                  <span class="status-pill"><span class="${hostControllerStatusClass}"></span>${escapeHtml(hostControllerStatusLabel)}</span>
+                </div>
+                <div class="metrics">
+                  <div class="metric"><span>Supported</span><strong>${escapeHtml(nullableYesNo(hostController.supported))}</strong></div>
+                  <div class="metric"><span>Available</span><strong>${escapeHtml(nullableYesNo(hostController.available))}</strong></div>
+                  <div class="metric"><span>Running</span><strong>${escapeHtml(nullableYesNo(hostController.running))}</strong></div>
+                  <div class="metric"><span>CLI command</span><strong><code>${escapeHtml(hostController.command || payload.config?.postureCliCommand || "n/a")}</code></strong></div>
+                  <div class="metric"><span>Port</span><strong>${escapeHtml(hostController.port ?? "n/a")}</strong></div>
+                  <div class="metric"><span>URL</span><strong><code>${escapeHtml(hostController.url || "n/a")}</code></strong></div>
+                </div>
+                <p class="help-text">${escapeHtml(hostController.summary || "No local host controller details available.")}</p>
+                ${
+                  hostActionResult
+                    ? `<p class="help-text">Last host action: ${escapeHtml(hostActionResult.summary || hostActionResult.action || "completed")}</p>`
+                    : ""
+                }
+                ${
+                  hostController.error
+                    ? `<pre class="check-detail">${escapeHtml(hostController.error)}</pre>`
+                    : ""
+                }
+                ${
+                  serviceManager.applicable === true
+                    ? `
+                      <div class="section-gap"></div>
+                      <div class="status-row">
+                        <span class="status-pill"><span class="${serviceManagerStatusClass}"></span>${escapeHtml(serviceManagerStatusLabel)}</span>
+                      </div>
+                      <div class="metrics">
+                        <div class="metric"><span>Service</span><strong><code>${escapeHtml(serviceManager.serviceName || "edamame_posture.service")}</code></strong></div>
+                        <div class="metric"><span>systemctl</span><strong><code>${escapeHtml(serviceManager.command || "systemctl")}</code></strong></div>
+                        <div class="metric"><span>Unit loaded</span><strong>${escapeHtml(nullableYesNo(serviceManager.unitLoaded))}</strong></div>
+                        <div class="metric"><span>Enabled</span><strong>${escapeHtml(nullableYesNo(serviceManager.enabled))}</strong></div>
+                        <div class="metric"><span>Active</span><strong>${escapeHtml(nullableYesNo(serviceManager.active))}</strong></div>
+                        <div class="metric"><span>Load state</span><strong>${escapeHtml(serviceManager.loadState || "unknown")}</strong></div>
+                        <div class="metric"><span>Unit file state</span><strong>${escapeHtml(serviceManager.unitFileState || "unknown")}</strong></div>
+                        <div class="metric"><span>Active state</span><strong>${escapeHtml(serviceManager.activeState || "unknown")}</strong></div>
+                        <div class="metric"><span>Wrapper script</span><strong>${escapeHtml(nullableYesNo(serviceManager.wrapperPresent))}</strong></div>
+                        <div class="metric"><span>Wrapper path</span><strong><code>${escapeHtml(serviceManager.wrapperPath || "n/a")}</code></strong></div>
+                        <div class="metric"><span>Config present</span><strong>${escapeHtml(nullableYesNo(serviceManager.configPresent))}</strong></div>
+                        <div class="metric"><span>Config path</span><strong><code>${escapeHtml(serviceManager.configPath || "n/a")}</code></strong></div>
+                      </div>
+                      <p class="help-text">${escapeHtml(serviceManager.summary || "No system service details available.")}</p>
+                      ${
+                        serviceManager.error
+                          ? `<pre class="check-detail">${escapeHtml(serviceManager.error)}</pre>`
+                          : ""
+                      }
+                    `
+                    : ""
+                }
+              </section>
+
+              <section class="card">
+                <h2>Local connection</h2>
+                <p class="card-intro">
+                  Hermes uses these local settings to connect to EDAMAME.
+                </p>
+                <div class="metrics">
+                  <div class="metric"><span>Platform</span><strong>${escapeHtml(payload.platform || "unknown")}</strong></div>
+                  <div class="metric"><span>Host product</span><strong>${escapeHtml(hostProductName)}</strong></div>
+                  <div class="metric"><span>MCP endpoint</span><strong><code>${escapeHtml(payload.config?.endpoint || "unset")}</code></strong></div>
+                  <div class="metric"><span>Local credential file</span><strong><code>${escapeHtml(payload.config?.pskFile || "unset")}</code></strong></div>
+                  <div class="metric"><span>Local config file</span><strong><code>${escapeHtml(payload.config?.configPath || "unset")}</code></strong></div>
+                </div>
+              </section>
+
+              <section class="card">
+                <h2>Intent export</h2>
+                <p class="card-intro">
+                  Read recent Hermes transcripts and export updated intent to EDAMAME.
+                </p>
+                <div class="metrics">
+                  <div class="metric"><span>Last export</span><strong>${escapeHtml(formatDate(extrapolator.lastRunAt))}</strong></div>
+                  <div class="metric"><span>Trigger</span><strong>${escapeHtml((extrapolator.lastReasons || []).join(", ") || "none")}</strong></div>
+                  <div class="metric"><span>Last error</span><strong>${escapeHtml(extrapolator.lastError || "none")}</strong></div>
+                  <div class="metric"><span>Remote intent hash</span><strong><code>${escapeHtml(extrapolator.lastWindowHash || "none")}</code></strong></div>
+                  <div class="metric"><span>Local payload hash</span><strong><code>${escapeHtml(extrapolator.lastPayloadHash || "none")}</code></strong></div>
+                </div>
+                ${
+                  refreshResult
+                    ? `<p class="help-text">Latest manual export: ${escapeHtml(
+                        (refreshResult.reasons || []).join(", ") || (refreshResult.success ? "success" : "failed"),
+                      )}${refreshResult.error ? ` (${escapeHtml(refreshResult.error)})` : ""}</p>`
+                    : ""
+                }
+              </section>
+
+              <section class="card">
+                <h2>EDAMAME status</h2>
+                <p class="card-intro">
+                  Current EDAMAME status for this workstation after pairing and intent export.
+                </p>
+                ${
+                  payload.posture
+                    ? `
+                      <div class="metrics">
+                        <div class="metric"><span>Live verdict</span><strong>${escapeHtml(posture.verdict || "NO_VERDICT")}</strong></div>
+                        <div class="metric"><span>Engine running</span><strong>${escapeHtml(yesNo(posture.engineRunning))}</strong></div>
+                        <div class="metric"><span>Intent present</span><strong>${escapeHtml(yesNo(posture.behavioralModelPresent))}</strong></div>
+                        <div class="metric"><span>Contributors</span><strong>${escapeHtml(String(posture.contributorCount ?? 0))}</strong></div>
+                        <div class="metric"><span>Todos</span><strong>${escapeHtml(String(posture.todosCount ?? 0))}</strong></div>
+                        <div class="metric"><span>Anomalous sessions</span><strong>${escapeHtml(String(posture.anomalousCount ?? 0))}</strong></div>
+                        <div class="metric"><span>Blacklisted sessions</span><strong>${escapeHtml(String(posture.blacklistedCount ?? 0))}</strong></div>
+                        <div class="metric"><span>Score</span><strong>${escapeHtml(posture.score ?? "n/a")}</strong></div>
+                      </div>
+                    `
+                    : `<p class="help-text">No EDAMAME status is available yet. Pair the bridge and make sure the MCP endpoint is reachable.</p>`
+                }
+              </section>
+
+              <section class="card">
+                <h2>${escapeHtml(pairing.instructions?.title || "Setup steps")}</h2>
+                <p class="card-intro">
+                  ${escapeHtml(pairing.instructions?.summary || "Follow these steps to pair Hermes with the local EDAMAME host.")}
+                </p>
+                <ol class="steps">
+                  ${(pairing.instructions?.steps || []).map((step) => `<li>${escapeHtml(step)}</li>`).join("")}
+                </ol>
+                <div class="section-gap"></div>
+                ${renderCommands(pairing.instructions?.commands || [])}
+              </section>
+
+              <section class="card">
+                <h2>Health checks</h2>
+                <p class="card-intro">
+                  These checks explain the current status. Fix the red items first, then refresh status again.
+                </p>
+                ${renderChecks(health.checks)}
+              </section>
+            </div>
+          </div>
+        `;
+
+        bindActions();
+      }
+
+      function startPolling() {
+        if (appState.pollHandle) return;
+        appState.pollHandle = window.setInterval(() => {
+          if (appState.busy) return;
+          void refreshStatus();
+        }, 15000);
+      }
+
+      function stopPolling() {
+        if (!appState.pollHandle) return;
+        window.clearInterval(appState.pollHandle);
+        appState.pollHandle = null;
+      }
+
+      async function initializeApp() {
+        window.addEventListener("message", async (event) => {
+          const message = event.data;
+          if (!message || typeof message !== "object") return;
+
+          if (message.id && appState.pending.has(message.id)) {
+            const pending = appState.pending.get(message.id);
+            appState.pending.delete(message.id);
+            if (message.error) {
+              pending.reject(new Error(message.error.message || "request_failed"));
+            } else {
+              pending.resolve(message.result);
+            }
+            return;
+          }
+
+          if (message.method === "ui/notifications/tool-result") {
+            setPayload(parseToolPayload(message.params));
+            return;
+          }
+
+          if (message.method === "ui/notifications/host-context-changed") {
+            applyHostContext({ ...(appState.hostContext || {}), ...(message.params || {}) });
+            render();
+            return;
+          }
+
+          if (message.method === "ui/resource-teardown") {
+            stopPolling();
+            window.parent.postMessage(
+              {
+                jsonrpc: "2.0",
+                id: message.id,
+                result: {},
+              },
+              "*",
+            );
+          }
+        });
+
+        const resizeObserver = new ResizeObserver((entries) => {
+          const entry = entries[0];
+          if (!entry) return;
+          const { width, height } = entry.contentRect;
+          sendNotification("ui/notifications/size-changed", {
+            width: Math.ceil(width),
+            height: Math.ceil(height),
+          });
+        });
+        resizeObserver.observe(document.body);
+
+        try {
+          const initResult = await sendRequest("ui/initialize", {
+            protocolVersion: "2026-01-26",
+            clientInfo: {
+              name: "edamame-control-center",
+              version: "1.0.0",
+            },
+            appCapabilities: {
+              availableDisplayModes: ["inline", "fullscreen"],
+            },
+          });
+          applyHostContext(initResult?.hostContext || {});
+        } catch (error) {
+          appState.error = `UI initialization failed: ${String(error?.message || error)}`;
+        }
+
+        sendNotification("ui/notifications/initialized", {});
+        render();
+        startPolling();
+      }
+
+      void initializeApp();
+    </script>
+  </body>
+</html>

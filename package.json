@@ -1,0 +1,36 @@
+{
+  "name": "edamame",
+  "version": "1.2.1",
+  "description": "EDAMAME Security plugin for Hermes - runtime behavioral monitoring",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "edamame-mcp": "./bridge/hermes_edamame_mcp.mjs",
+    "edamame-healthcheck": "./service/healthcheck_cli.mjs",
+    "edamame-extrapolator": "./service/hermes_extrapolator.mjs",
+    "edamame-verdict-reader": "./service/verdict_reader.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "e2e:inject": "bash tests/e2e_inject_intent.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/edamametechnologies/edamame_hermes.git"
+  },
+  "author": "EDAMAME Technologies <info@edamame.tech>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "edamame",
+    "security",
+    "hermes",
+    "mcp",
+    "behavioral-monitoring",
+    "divergence-detection"
+  ],
+  "optionalDependencies": {
+    "better-sqlite3": "^11.8.1"
+  }
+}

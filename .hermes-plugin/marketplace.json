@@ -1,0 +1,28 @@
+{
+  "name": "edamame-security",
+  "owner": {
+    "name": "EDAMAME Technologies",
+    "email": "info@edamame.tech"
+  },
+  "metadata": {
+    "description": "Runtime behavioral monitoring for AI coding agents. Bridges session transcripts to the EDAMAME Security two-plane divergence engine.",
+    "version": "1.2.1"
+  },
+  "plugins": [
+    {
+      "name": "edamame",
+      "source": "./",
+      "description": "Runtime behavioral monitoring for Hermes. Bridges session transcripts to the EDAMAME Security two-plane divergence engine for continuous developer workstation protection.",
+      "version": "1.2.1",
+      "author": {
+        "name": "EDAMAME Technologies",
+        "email": "info@edamame.tech"
+      },
+      "homepage": "https://edamame.tech",
+      "repository": "https://github.com/edamametechnologies/edamame_hermes",
+      "license": "Apache-2.0",
+      "category": "security",
+      "tags": ["security", "runtime-monitoring", "divergence-detection", "mcp"]
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+on:
+  push:
+    branches: [ dev, main ]
+    paths:
+      - '.hermes-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
+      - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - '.hermes-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
+      - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+name: Plugin install and unit tests
+
+permissions: read-all
+
+jobs:
+  test:
+    name: Install and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - name: Setup EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          edamame_user: ${{ vars.EDAMAME_POSTURE_USER }}
+          edamame_domain: ${{ vars.EDAMAME_POSTURE_DOMAIN }}
+          edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
+          edamame_id: ${{ github.run_id }}
+          checkout: true
+          packet_capture: true
+          vulnerability_detection: true
+          vulnerability_detection_interval: "60"
+          agentic_mode: analyze
+          agentic_provider: edamame
+          agentic_interval: 600
+        env:
+          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate plugin manifest
+        run: |
+          echo "--- Validating plugin manifest ---"
+          node -e "
+            const fs = require('fs');
+            if (!fs.existsSync('.hermes-plugin/plugin.json')) { console.error('FAIL: .hermes-plugin/plugin.json not found'); process.exit(1); }
+            if (!fs.existsSync('.mcp.json')) { console.error('FAIL: .mcp.json not found'); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync('.hermes-plugin/plugin.json', 'utf8'));
+            console.log('Plugin name:', m.name);
+            console.log('Plugin version:', m.version);
+            console.log('MCP servers ref:', m.mcpServers);
+            if (!m.name) { console.error('FAIL: missing name'); process.exit(1); }
+            if (m.mcpServers !== './.mcp.json') { console.error('FAIL: mcpServers should reference ./.mcp.json'); process.exit(1); }
+          "
+          echo "--- Plugin manifest valid ---"
+
+      - name: Verify plugin structure
+        run: |
+          echo "--- Checking plugin file structure ---"
+          node -e "
+            const fs = require('fs');
+            const files = [
+              'bridge/hermes_edamame_mcp.mjs',
+              'bridge/edamame_client.mjs',
+              'bridge/control_center_app.html',
+              'adapters/session_prediction_adapter.mjs',
+              'service/hermes_extrapolator.mjs',
+              'service/control_center.mjs',
+              'service/health.mjs',
+              'service/config.mjs',
+              'setup/install.sh',
+              'setup/healthcheck.sh',
+              'skills/security-posture/SKILL.md',
+              'skills/divergence-monitor/SKILL.md',
+              'agents/security-monitor.md',
+              'commands/healthcheck.md',
+            ];
+            let ok = true;
+            for (const f of files) {
+              if (!fs.existsSync(f)) { console.error('FAIL: ' + f + ' not found'); ok = false; }
+              else { console.log('  OK: ' + f); }
+            }
+            if (!ok) process.exit(1);
+          "
+          echo "--- Plugin structure valid ---"
+
+      - name: Run manual install (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "--- Running manual install ---"
+          bash setup/install.sh "$PWD"
+          echo "--- Manual install completed ---"
+
+      - name: Run manual install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "--- Running manual install ---"
+          .\setup\install.ps1 -WorkspaceRoot "$PWD"
+          echo "--- Manual install completed ---"
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Verify MCP bridge exports and tool contract
+        run: |
+          echo "--- Verifying MCP bridge module exports and tool contract ---"
+          node -e "
+            import('./bridge/hermes_edamame_mcp.mjs').then(m => {
+              const fns = ['handleRequest', 'tryExtractMessages', 'createBackgroundRefreshLoop', 'createHermesDrivenRefresh'];
+              for (const fn of fns) {
+                if (typeof m[fn] !== 'function') { console.error('FAIL: missing export ' + fn); process.exit(1); }
+                console.log('  OK: ' + fn);
+              }
+              const toolNames = (m.TOOL_DEFINITIONS || []).map((tool) => tool.name);
+              const resourceUris = (m.RESOURCE_DEFINITIONS || []).map((resource) => resource.uri);
+              for (const toolName of [
+                'edamame_hermes_control_center',
+                'edamame_hermes_control_center_refresh',
+                'edamame_hermes_control_center_refresh_now',
+                'hermes_refresh_behavioral_model',
+                'hermes_healthcheck',
+                'hermes_posture_summary',
+                'edamame_get_divergence_verdict',
+                'edamame_get_score'
+              ]) {
+                if (!toolNames.includes(toolName)) { console.error('FAIL: missing tool ' + toolName); process.exit(1); }
+                console.log('  OK tool: ' + toolName);
+              }
+              if (!resourceUris.includes('ui://edamame/control-center.html')) {
+                console.error('FAIL: missing control center resource');
+                process.exit(1);
+              }
+              console.log('Bridge contract check passed');
+            }).catch(e => { console.error('FAIL:', e.message); process.exit(1); });
+          "
+          echo "--- MCP bridge verification complete ---"
+
+      - name: EDAMAME Posture vulnerability gate
+        if: always()
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          dump_vulnerability_findings: true
+          exit_on_vulnerability_findings: true
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: "C072J0U9TH7"
+          slack-message: |
+            *edamame_hermes CI Failed (${{ matrix.os }})*
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true

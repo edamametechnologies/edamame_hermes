@@ -1,0 +1,22 @@
+{
+  "name": "edamame",
+  "description": "Runtime behavioral monitoring for Hermes. Bridges session transcripts to the EDAMAME Security two-plane divergence engine for continuous developer workstation protection.",
+  "version": "1.2.1",
+  "author": {
+    "name": "EDAMAME Technologies",
+    "email": "info@edamame.tech"
+  },
+  "homepage": "https://edamame.tech",
+  "repository": "https://github.com/edamametechnologies/edamame_hermes",
+  "license": "Apache-2.0",
+  "keywords": [
+    "security",
+    "runtime-monitoring",
+    "behavioral-analysis",
+    "divergence-detection",
+    "developer-workstation",
+    "mcp",
+    "edamame"
+  ],
+  "mcpServers": "./.mcp.json"
+}

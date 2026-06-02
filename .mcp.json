@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "edamame": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bridge/hermes_edamame_mcp.mjs"
+      ]
+    }
+  }
+}

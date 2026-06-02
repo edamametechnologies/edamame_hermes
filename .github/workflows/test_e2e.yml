@@ -1,0 +1,977 @@
+on:
+  push:
+    branches: [ dev, main ]
+    paths:
+      - '.hermes-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
+      - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/test_e2e.yml'
+  pull_request:
+    paths:
+      - '.hermes-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
+      - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/test_e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+name: E2E tests
+
+permissions: read-all
+
+jobs:
+  provision:
+    name: Provision (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+
+      - name: Setup EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          disconnected_mode: true
+          packet_capture: true
+          checkout: true
+        env:
+          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
+
+      - name: Set EDAMAME_POSTURE env var
+        shell: bash
+        run: echo "EDAMAME_POSTURE=$EDAMAME_BINARY_PATH" >> "$GITHUB_ENV"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install C compiler (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          /c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-gcc
+          echo "C:\msys64\mingw64\bin" >> "$GITHUB_PATH"
+          /c/msys64/mingw64/bin/gcc.exe --version
+          echo "CC=C:\msys64\mingw64\bin\gcc.exe" >> "$GITHUB_ENV"
+
+      - name: Generate PSK and start MCP server
+        shell: bash
+        run: |
+          PSK=$("$EDAMAME_POSTURE" mcp-generate-psk 2>&1 | head -n1) || true
+          if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
+            PSK=$(sudo "$EDAMAME_POSTURE" mcp-generate-psk 2>&1 | head -n1) || true
+          fi
+          if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
+            echo "FAIL: could not generate PSK (got: '$PSK')"
+            exit 1
+          fi
+          echo "EDAMAME_PSK=$PSK" >> "$GITHUB_ENV"
+          echo "PSK generated (${#PSK} chars)"
+
+          echo "--- Starting MCP server with PSK ---"
+          MCP_CMD="$EDAMAME_POSTURE"
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            MCP_CMD="sudo $EDAMAME_POSTURE"
+          fi
+          for attempt in 1 2 3 4 5; do
+            $MCP_CMD mcp-stop 2>/dev/null || true
+            sleep 3
+            if $MCP_CMD mcp-start 3000 "$PSK" 2>&1; then
+              echo "MCP server started on port 3000"
+              break
+            fi
+            echo "MCP start attempt $attempt/5 failed, retrying..."
+            if [ "$attempt" -eq 5 ]; then
+              echo "FAIL: could not start MCP server after 5 attempts"
+              exit 1
+            fi
+          done
+
+      - name: Verify MCP server responds
+        shell: bash
+        run: |
+          MCP_URL="http://127.0.0.1:3000/mcp"
+          HDRS="/tmp/mcp_headers.txt"
+
+          mcp_curl() {
+            local SESSION_ARGS=()
+            [ -n "${MCP_SESSION:-}" ] && SESSION_ARGS=(-H "Mcp-Session-Id: $MCP_SESSION")
+            curl -s -X POST "$MCP_URL" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -H "Authorization: Bearer $EDAMAME_PSK" \
+              "${SESSION_ARGS[@]}" "$@"
+          }
+
+          echo "--- initialize ---"
+          INIT_RAW=$(curl -s -D "$HDRS" -X POST "$MCP_URL" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
+            -H "Authorization: Bearer $EDAMAME_PSK" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-test","version":"1.0"}}}')
+          INIT=$(echo "$INIT_RAW" | sed 's/^data: //')
+          echo "$INIT" | head -c 500
+          echo ""
+
+          MCP_SESSION=$(grep -i 'mcp-session-id' "$HDRS" 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1 || true)
+          echo "Session: ${MCP_SESSION:-<none>}"
+
+          echo "--- initialized (notification) ---"
+          mcp_curl -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' > /dev/null 2>&1 || true
+
+          echo "--- tools/list ---"
+          TOOLS_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
+          TOOLS=$(echo "$TOOLS_RAW" | sed 's/^data: //')
+          echo "$TOOLS" | head -c 500
+          echo ""
+          if echo "$TOOLS" | grep -q '"tools"'; then
+            echo "tools/list OK"
+          else
+            echo "FAIL: tools/list did not return tools"; exit 1
+          fi
+
+          echo "--- tools/call get_score ---"
+          SCORE_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
+          SCORE=$(echo "$SCORE_RAW" | sed 's/^data: //')
+          echo "$SCORE" | head -c 500
+          echo ""
+          echo "MCP server verified"
+
+      # ── Install plugin ──────────────────────────────────────────
+
+      - name: Run install (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Running install.sh ---"
+          bash setup/install.sh "$PWD"
+          echo "--- Install completed ---"
+
+      - name: Run install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Running install.ps1 ---"
+          & "$PWD\setup\install.ps1" -WorkspaceRoot "$PWD"
+          Write-Host "--- Install completed ---"
+
+      # ── Resolve paths ────────────────────────────────────────────
+
+      - name: Resolve installed paths (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$(uname)" = "Darwin" ]; then
+            INSTALL_ROOT="$HOME/Library/Application Support/hermes-edamame/current"
+            CONFIG_DIR="$HOME/Library/Application Support/hermes-edamame"
+            STATE_DIR="$HOME/Library/Application Support/hermes-edamame/state"
+            GLOBAL_MCP="${HERMES_HOME:-$HOME/.hermes}/config.yaml"
+          else
+            INSTALL_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-edamame/current"
+            CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-edamame"
+            STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hermes-edamame"
+            GLOBAL_MCP="${HERMES_HOME:-$HOME/.hermes}/config.yaml"
+          fi
+          echo "INSTALL_ROOT=$INSTALL_ROOT" >> "$GITHUB_ENV"
+          echo "CONFIG_DIR=$CONFIG_DIR" >> "$GITHUB_ENV"
+          echo "STATE_DIR=$STATE_DIR" >> "$GITHUB_ENV"
+          echo "GLOBAL_MCP=$GLOBAL_MCP" >> "$GITHUB_ENV"
+          echo "CONFIG_PATH=$CONFIG_DIR/config.json" >> "$GITHUB_ENV"
+
+      - name: Resolve installed paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $InstallRoot = Join-Path $env:LOCALAPPDATA "hermes-edamame\current"
+          $ConfigDir   = Join-Path $env:APPDATA "hermes-edamame"
+          $StateDir    = Join-Path $env:LOCALAPPDATA "hermes-edamame\state"
+          $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:USERPROFILE ".hermes" }
+          $GlobalMcp   = Join-Path $HermesHome "config.yaml"
+          "INSTALL_ROOT=$InstallRoot"   | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "CONFIG_DIR=$ConfigDir"       | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "STATE_DIR=$StateDir"         | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "GLOBAL_MCP=$GlobalMcp"       | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "CONFIG_PATH=$ConfigDir\config.json" | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+
+      # ── Verify installed layout ──────────────────────────────────
+
+      - name: Verify installed layout (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Checking installed files ---"
+          FAIL=0
+          for f in \
+            "$INSTALL_ROOT/bridge/hermes_edamame_mcp.mjs" \
+            "$INSTALL_ROOT/service/config.mjs" \
+            "$INSTALL_ROOT/service/health.mjs" \
+            "$INSTALL_ROOT/setup/install.sh" \
+            "$INSTALL_ROOT/package.json" \
+            "$CONFIG_PATH"; do
+            if [ -f "$f" ]; then
+              echo "  OK: $f"
+            else
+              echo "  FAIL: $f not found"
+              FAIL=1
+            fi
+          done
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "--- Layout verified ---"
+
+      - name: Verify installed layout (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Checking installed files ---"
+          $fail = $false
+          $files = @(
+            "$env:INSTALL_ROOT\bridge\hermes_edamame_mcp.mjs",
+            "$env:INSTALL_ROOT\service\config.mjs",
+            "$env:INSTALL_ROOT\service\health.mjs",
+            "$env:INSTALL_ROOT\setup\install.ps1",
+            "$env:INSTALL_ROOT\package.json",
+            "$env:CONFIG_PATH"
+          )
+          foreach ($f in $files) {
+            if (Test-Path $f) { Write-Host "  OK: $f" }
+            else { Write-Host "  FAIL: $f not found"; $fail = $true }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "--- Layout verified ---"
+
+      # ── Verify package.json version ──────────────────────────────
+
+      - name: Verify package.json version
+        shell: bash
+        run: |
+          node -e "
+            const path = require('path');
+            const p = path.join(process.env.INSTALL_ROOT, 'package.json');
+            const pkg = JSON.parse(require('fs').readFileSync(p, 'utf8'));
+            if (!pkg.version) { console.error('FAIL: no version'); process.exit(1); }
+            console.log('Installed version:', pkg.version);
+          "
+
+      # ── Verify plugin manifest ───────────────────────────────────
+
+      - name: Verify plugin manifest
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const manifest = path.join(process.env.INSTALL_ROOT, '.hermes-plugin', 'plugin.json');
+            if (!fs.existsSync(manifest)) { console.error('FAIL: ' + manifest + ' not found'); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+            for (const key of ['name', 'version']) {
+              if (!m[key]) { console.error('FAIL: missing ' + key + ' in plugin manifest'); process.exit(1); }
+              console.log('  ' + key + ': ' + m[key]);
+            }
+            const pkg = JSON.parse(fs.readFileSync(path.join(process.env.INSTALL_ROOT, 'package.json'), 'utf8'));
+            if (m.version !== pkg.version) {
+              console.error('FAIL: plugin.json version (' + m.version + ') != package.json version (' + pkg.version + ')');
+              process.exit(1);
+            }
+            console.log('Plugin manifest valid');
+          "
+
+      # ── Verify global MCP registration ──────────────────────────
+
+      - name: Verify global MCP config
+        shell: bash
+        run: |
+          echo "--- Checking global MCP config ---"
+          python3 - <<'PY'
+          import os, sys
+          from pathlib import Path
+          p = Path(os.environ['GLOBAL_MCP'])
+          if not p.exists():
+              print(f'FAIL: {p} not found')
+              sys.exit(1)
+          raw = p.read_text(encoding='utf-8')
+          # Hermes declares MCP servers as YAML under `mcp_servers:`; the
+          # server key MUST be `edamame` (server_key in index.json).
+          required = ['mcp_servers:', 'edamame:', 'type: stdio', 'command:', 'args:']
+          missing = [item for item in required if item not in raw]
+          if missing:
+              print(f'FAIL: missing {missing} in {p}')
+              sys.exit(1)
+          print('MCP entry OK:', p)
+          PY
+          echo "--- Global MCP verified ---"
+
+      # ── PSK pairing with real posture MCP ──────────────────────
+
+      - name: Write PSK to plugin state
+        shell: bash
+        run: |
+          PSK_FILE="$STATE_DIR/edamame-mcp.psk"
+          mkdir -p "$(dirname "$PSK_FILE")"
+          echo -n "$EDAMAME_PSK" > "$PSK_FILE"
+          echo "PSK written to $PSK_FILE"
+
+      # ── Healthcheck via real MCP ────────────────────────────────
+
+      - name: Run healthcheck against real MCP
+        shell: bash
+        env:
+          EDAMAME_MCP_ENDPOINT: http://127.0.0.1:3000/mcp
+        run: |
+          echo "--- Running healthcheck ---"
+          node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json || true
+          echo "--- Healthcheck completed ---"
+
+      # ── Intent E2E (full LLM-backed) ───────────────────────────
+
+      - name: Install edamame_cli
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf \
+              https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
+              | sh -s --
+            EC=$(command -v edamame_cli.exe 2>/dev/null || command -v edamame_cli 2>/dev/null || echo "$HOME/edamame_cli.exe")
+          else
+            curl --proto '=https' --tlsv1.2 -sSf \
+              https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
+              | sudo -E sh -s --
+            EC=$(command -v edamame_cli 2>/dev/null || echo /usr/local/bin/edamame_cli)
+          fi
+          echo "EDAMAME_CLI=$EC" >> "$GITHUB_ENV"
+          "$EC" --version
+
+      # ── External transcript observer probe ─────────────────────
+      # Confirms the new observer RPCs (get_transcript_observer_status,
+      # set_transcript_observer_enabled, run_transcript_observer_tick_for)
+      # are wired up. The step is non-fatal so older edamame_posture
+      # releases that predate the observer keep CI green.
+
+      - name: Verify transcript observer integration
+        timeout-minutes: 3
+        shell: bash
+        env:
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
+          OBSERVER_AGENT_TYPE: hermes
+        run: |
+          echo "--- Probing transcript observer RPC surface for $OBSERVER_AGENT_TYPE ---"
+          STATUS_RAW="$("$EDAMAME_CLI" rpc get_transcript_observer_status 2>&1 || true)"
+          if echo "$STATUS_RAW" | grep -qiE "unknown.*method|method.*not found|unimplemented"; then
+            echo "INFO: get_transcript_observer_status not present on this posture build; skipping observer probe"
+            exit 0
+          fi
+          echo "$STATUS_RAW" | head -c 800
+          echo ""
+          if echo "$STATUS_RAW" | grep -q "\"agent_type\":\"$OBSERVER_AGENT_TYPE\""; then
+            echo "OK: $OBSERVER_AGENT_TYPE row present in observer status"
+          else
+            echo "WARN: $OBSERVER_AGENT_TYPE row not in observer status (registry propagation delay?)"
+          fi
+
+          echo "--- Toggling observer pause/resume for $OBSERVER_AGENT_TYPE ---"
+          "$EDAMAME_CLI" rpc set_transcript_observer_enabled \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\",\"enabled\":false}" 2>&1 | head -c 400 \
+            || echo "WARN: set_transcript_observer_enabled disable probe failed (non-fatal)"
+          echo ""
+          "$EDAMAME_CLI" rpc set_transcript_observer_enabled \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\",\"enabled\":true}" 2>&1 | head -c 400 \
+            || echo "WARN: set_transcript_observer_enabled enable probe failed (non-fatal)"
+          echo ""
+
+          echo "--- Forcing observer tick for $OBSERVER_AGENT_TYPE ---"
+          "$EDAMAME_CLI" rpc run_transcript_observer_tick_for \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\"}" 2>&1 | head -c 800 \
+            || echo "WARN: run_transcript_observer_tick_for probe failed (non-fatal)"
+          echo ""
+
+          echo "--- Verifying split healthcheck shape (mcp_tools + observer) ---"
+          HEALTH_RAW="$("$EDAMAME_CLI" rpc get_agent_plugin_health \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\"}" 2>&1 || true)"
+          if echo "$HEALTH_RAW" | grep -qiE "unknown.*method|method.*not found"; then
+            echo "INFO: get_agent_plugin_health not present on this posture build; skipping split-healthcheck probe"
+          else
+            echo "$HEALTH_RAW" | head -c 800
+            echo ""
+            if echo "$HEALTH_RAW" | grep -q '"mcp_tools"' && echo "$HEALTH_RAW" | grep -q '"observer"'; then
+              echo "OK: split healthcheck contains mcp_tools and observer sections"
+            else
+              echo "WARN: split healthcheck missing one of mcp_tools / observer (non-fatal)"
+            fi
+          fi
+          echo "--- Observer probe complete ---"
+
+      - name: Run intent E2E
+        timeout-minutes: 10
+        shell: bash
+        env:
+          E2E_POLL_ATTEMPTS: "48"
+          E2E_POLL_INTERVAL_SECS: "5"
+          E2E_SKIP_PROVISION_STRICT: "1"
+          E2E_SKIP_PLUGIN_CHECK: "1"
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
+        run: |
+          bash tests/e2e_inject_intent.sh
+
+      # ── Divergence verdict E2E ──────────────────────────────────
+      # Downloads only the divergence + goal_drift trigger scripts from
+      # agent_security and verifies that the divergence engine produces
+      # the right verdict semantics against the model just pushed by
+      # this plugin's intent E2E. The wider CVE detection matrix
+      # (token_exfil, sandbox_escape, memory_poisoning, credential_sprawl,
+      # supply_chain_exfil, blacklist_comm, npm_rat_beacon, file_events)
+      # plus the false-positive baseline is owned by edamame_posture's
+      # security CI -- see tests/security/run_cve_detection.sh and the
+      # release gate in tests/security/check_gate.py.
+
+      - name: Download divergence trigger scripts
+        shell: bash
+        run: |
+          TRIGGERS_DIR="${RUNNER_TEMP:-/tmp}/cve_triggers"
+          mkdir -p "$TRIGGERS_DIR"
+          BASE_URL="https://raw.githubusercontent.com/edamametechnologies/agent_security/main/tests/e2e/triggers"
+          # Plugin CI only exercises the two scenarios that require a
+          # plugin-pushed behavioral model. The full vulnerability detector
+          # CVE matrix (token_exfil, sandbox_escape, memory_poisoning,
+          # credential_sprawl, supply_chain_exfil, blacklist_comm,
+          # npm_rat_beacon, file_events) plus the false-positive baseline
+          # is owned by edamame_posture's security CI -- see
+          # edamame_posture/tests/security/run_cve_detection.sh and the
+          # release gate in tests/security/check_gate.py.
+          for f in _common.py _native_udp_probe.py _edamame_cli.py cleanup.py \
+                   trigger_divergence.py trigger_goal_drift.py; do
+            curl -sfL "$BASE_URL/$f" -o "$TRIGGERS_DIR/$f" || echo "WARN: failed to download $f"
+          done
+          echo "CVE_TRIGGERS_DIR=$TRIGGERS_DIR" >> "$GITHUB_ENV"
+          ls -la "$TRIGGERS_DIR"
+
+      - name: Run divergence verdict scenarios
+        timeout-minutes: 15
+        shell: bash
+        env:
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
+          EDAMAME_AGENT_TYPE: hermes
+        run: |
+          TRIGGERS_DIR="$CVE_TRIGGERS_DIR"
+          CLI="$EDAMAME_CLI"
+          AGENT_TYPE="hermes"
+
+          TRIGGER_DURATION=60
+          POST_WAIT=30
+          COOLDOWN=5
+          POLL_ATTEMPTS=6
+          POLL_INTERVAL=10
+
+          SCENARIOS_PASS=0
+          SCENARIOS_FAIL=0
+          SCENARIOS_SKIP=0
+          SCENARIOS_HARD_FAIL=0
+          DIVERGENCE_MODEL_MIN_AGE_SECS=65
+          DIVERGENCE_AGENT_INSTANCE_ID="e2e-divergence-ci-${AGENT_TYPE}-${GITHUB_RUN_ID:-local}"
+
+          check_sessions() {
+            local target_desc="$1"
+            local _pysess
+            _pysess="$(mktemp)"
+            cat > "$_pysess" <<'PYSESS'
+          import json, sys
+          raw = sys.stdin.read().strip()
+          if raw.startswith('Result: '):
+              raw = raw[len('Result: '):]
+          if not raw or raw == 'null':
+              print('  total_sessions=0')
+              sys.exit(1)
+          try:
+              data = json.loads(raw)
+              if isinstance(data, str):
+                  data = json.loads(data)
+          except Exception as e:
+              print(f'  sessions: parse error: {e}')
+              print(f'  raw_prefix: {raw[:200]}')
+              sys.exit(1)
+          sessions = data if isinstance(data, list) else data.get('sessions', [])
+          print(f'  total_sessions={len(sessions)}')
+          target = sys.argv[1]
+          matched = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions if target in json.dumps(s)]
+          if matched:
+              print(f'  matched: {matched[:5]}')
+              sys.exit(0)
+          dst_sample = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions[:10]]
+          if dst_sample:
+              print(f'  sample_destinations: {dst_sample}')
+          sys.exit(1)
+          PYSESS
+            "$CLI" rpc get_current_sessions 2>/dev/null | python3 "$_pysess" "$target_desc" 2>&1
+            local _rc=$?
+            rm -f "$_pysess"
+            return $_rc
+          }
+
+          ensure_divergence_harness_ready() {
+            EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" AGENT_TYPE="$AGENT_TYPE" \
+              DIVERGENCE_AGENT_INSTANCE_ID="$DIVERGENCE_AGENT_INSTANCE_ID" python3 - <<'PY'
+          import datetime, json, os, sys
+
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+
+          agent_type = os.environ['AGENT_TYPE']
+          agent_instance_id = os.environ['DIVERGENCE_AGENT_INSTANCE_ID']
+
+          now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+          blocked_traffic = [f'one.one.one.one:{port}' for port in range(63169, 63184)]
+          blocked_traffic += [f'1.0.0.1:{port}' for port in range(63169, 63184)]
+          blocked_traffic += [f'one.one.one.one:{port}' for port in range(63200, 63215)]
+          blocked_traffic += [f'1.1.1.1:{port}' for port in range(63200, 63215)]
+          window = {
+              'window_start': (now - datetime.timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'),
+              'window_end': (now - datetime.timedelta(minutes=4)).isoformat().replace('+00:00', 'Z'),
+              'agent_type': agent_type,
+              'agent_instance_id': agent_instance_id,
+              'predictions': [
+                  {
+                      'agent_type': agent_type,
+                      'agent_instance_id': agent_instance_id,
+                      'session_key': 'e2e_divergence_probe_scope',
+                      'action': 'Workflow divergence probe scope',
+                      'tools_called': ['run'],
+                      'scope_process_paths': ['*/divergence_probe*'],
+                      'scope_parent_paths': [],
+                      'scope_grandparent_paths': [],
+                      'scope_any_lineage_paths': [],
+                      'expected_traffic': ['api.anthropic.com:443'],
+                      'expected_sensitive_files': [],
+                      'expected_lan_devices': [],
+                      'expected_local_open_ports': [],
+                      'expected_process_paths': ['*/divergence_probe*'],
+                      'expected_parent_paths': [],
+                      'expected_grandparent_paths': [],
+                      'expected_open_files': [],
+                      'expected_l7_protocols': [],
+                      'expected_system_config': [],
+                      'not_expected_traffic': blocked_traffic,
+                      'not_expected_sensitive_files': [],
+                      'not_expected_lan_devices': [],
+                      'not_expected_local_open_ports': [],
+                      'not_expected_process_paths': [],
+                      'not_expected_parent_paths': [],
+                      'not_expected_grandparent_paths': [],
+                      'not_expected_open_files': [],
+                      'not_expected_l7_protocols': [],
+                      'not_expected_system_config': [],
+                      'raw_input': None,
+                  }
+              ],
+              'contributors': [],
+              'version': 'e2e/divergence-probe',
+              'hash': '',
+              'ingested_at': now.isoformat().replace('+00:00', 'Z'),
+          }
+
+          cli_rpc('clear_divergence_state')
+          cli_rpc('clear_divergence_history')
+          cli_rpc('start_divergence_engine', '[true, 300]')
+          cli_rpc('upsert_behavioral_model', json.dumps({'window_json': json.dumps(window)}))
+          status = cli_rpc('get_divergence_engine_status')
+          print(json.dumps(status))
+          PY
+          }
+
+          wait_for_divergence_model_ready() {
+            local waited=0
+            local max_wait=$((DIVERGENCE_MODEL_MIN_AGE_SECS + 60))
+            local _pystat
+            _pystat="$(mktemp)"
+            cat > "$_pystat" <<'PYSTAT'
+          import json, os, sys
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+          s = cli_rpc('get_divergence_engine_status')
+          if isinstance(s, str):
+              s = json.loads(s)
+          age = s.get('model_age_secs') if isinstance(s, dict) else 0
+          contrib = s.get('contributor_count') if isinstance(s, dict) else 0
+          running = bool(s.get('running')) if isinstance(s, dict) else False
+          print(f'{int(age or 0)}|{int(contrib or 0)}|{1 if running else 0}')
+          PYSTAT
+            while ((waited <= max_wait)); do
+              local status
+              status="$(EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 "$_pystat" 2>/dev/null)" || status="0|0|0"
+              local age="${status%%|*}"
+              local rest="${status#*|}"
+              local contrib="${rest%%|*}"
+              local running="${rest#*|}"
+              if [[ "$running" -eq 1 && "$contrib" -gt 0 && "$age" -ge "$DIVERGENCE_MODEL_MIN_AGE_SECS" ]]; then
+                rm -f "$_pystat"
+                return 0
+              fi
+              echo "  divergence model warming: running=$running contributors=$contrib age=${age}s"
+              sleep 5
+              waited=$((waited + 5))
+            done
+            rm -f "$_pystat"
+            return 1
+          }
+
+          check_divergence_semantics() {
+            local scenario="$1"
+            local max_attempts=6
+            local retry_wait=10
+            local _pycheck
+            _pycheck="$(mktemp)"
+            cat > "$_pycheck" <<'PY'
+          import json, os, sys
+
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+
+          scenario = sys.argv[1].strip()
+          min_age = int(sys.argv[2])
+          expected_prefix = {
+              'divergence': '1.0.0.1:',
+              'goal_drift': '1.1.1.1:',
+          }.get(scenario)
+
+          summary = cli_rpc('get_divergence_verdict')
+          if isinstance(summary, str):
+              summary = json.loads(summary)
+          status = cli_rpc('get_divergence_engine_status')
+          if isinstance(status, str):
+              status = json.loads(status)
+          sessions = cli_rpc('get_current_sessions')
+          if isinstance(sessions, str):
+              sessions = json.loads(sessions)
+
+          probe_active = 0
+          for session in sessions if isinstance(sessions, list) else []:
+              if not isinstance(session, dict):
+                  continue
+              l7 = session.get('l7') or {}
+              process_path = str(l7.get('process_path') or '')
+              active = bool((session.get('status') or {}).get('active'))
+              basename = process_path.replace('\\', '/').rsplit('/', 1)[-1]
+              if basename in ('divergence_probe', 'divergence_probe.exe') and active:
+                  probe_active += 1
+
+          verdict = str(summary.get('verdict') or '').strip().upper()
+          decision_source = str(summary.get('decision_source') or '').strip()
+          trace_available = summary.get('trace_available')
+          entry_id = str(summary.get('entry_id') or '').strip()
+          evidence = summary.get('evidence') or []
+          categories = sorted(
+              {
+                  str(item.get('category') or '').strip()
+                  for item in evidence
+                  if isinstance(item, dict) and str(item.get('category') or '').strip()
+              }
+          )
+          descriptions = [
+              str(item.get('description') or '')
+              for item in evidence
+              if isinstance(item, dict)
+          ]
+
+          running = bool(status.get('running')) if isinstance(status, dict) else False
+          contributors = int(status.get('contributor_count') or 0) if isinstance(status, dict) else 0
+          age = int(status.get('model_age_secs') or 0) if isinstance(status, dict) else 0
+
+          ok = all(
+              [
+                  verdict == 'DIVERGENCE',
+                  running,
+                  contributors > 0,
+                  age >= min_age,
+                  'correlation:not_expected' in categories,
+                  bool(decision_source),
+                  isinstance(trace_available, bool),
+              ]
+          )
+
+          message = (
+              f'verdict={verdict or "NONE"} probe_active={probe_active} '
+              f'model_age={age}s contributors={contributors} running={int(running)} '
+              f'decision_source={decision_source or "NONE"} '
+              f'trace_available={trace_available} '
+              f'categories={",".join(categories) if categories else "none"} '
+              f'entry_id={entry_id or "missing"}'
+          )
+
+          print(message)
+          sys.exit(0 if ok else 1)
+          PY
+            for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+              "$CLI" rpc debug_run_divergence_tick >/dev/null 2>&1 || true
+              if EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 "$_pycheck" "$scenario" "$DIVERGENCE_MODEL_MIN_AGE_SECS"; then
+                rm -f "$_pycheck"
+                return 0
+              fi
+              if ((attempt < max_attempts)); then
+                echo "  Divergence tick skipped or verdict not ready, retrying in ${retry_wait}s (attempt ${attempt}/${max_attempts})..."
+                sleep "$retry_wait"
+              fi
+            done
+            rm -f "$_pycheck"
+            return 1
+          }
+
+          run_scenario() {
+            local name="$1"
+            local script="trigger_${name}.py"
+            local target_desc="$2"
+
+            if [ ! -f "$TRIGGERS_DIR/$script" ]; then
+              echo "SKIP: $script not found"
+              SCENARIOS_SKIP=$((SCENARIOS_SKIP + 1))
+              return 0
+            fi
+
+            echo ""
+            echo "=========================================="
+            echo "SCENARIO: $name"
+            echo "=========================================="
+
+            local REQUIRE_SEMANTICS=0
+            local SEMANTIC_OK=1
+            if [[ "$name" == "divergence" || "$name" == "goal_drift" ]]; then
+              REQUIRE_SEMANTICS=1
+              echo "--- Seeding divergence harness model ---"
+              if ! ensure_divergence_harness_ready; then
+                echo "FAIL: $name - divergence harness model seed failed"
+                SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+                SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
+                return 0
+              fi
+              echo "--- Waiting for divergence model readiness ---"
+              if ! wait_for_divergence_model_ready; then
+                echo "FAIL: $name - divergence harness model did not become ready"
+                SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+                SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
+                return 0
+              fi
+            fi
+
+            echo "--- Starting trigger (${TRIGGER_DURATION}s) ---"
+            python3 "$TRIGGERS_DIR/$script" \
+              --agent-type "$AGENT_TYPE" \
+              --duration "$TRIGGER_DURATION" &
+            local TPID=$!
+            echo "Trigger PID: $TPID"
+
+            echo "--- Waiting ${POST_WAIT}s for session ingestion ---"
+            sleep "$POST_WAIT"
+
+            echo "--- Checking sessions via edamame_cli ---"
+            local FOUND=0
+            for ((i = 1; i <= POLL_ATTEMPTS; i++)); do
+              echo "  poll $i/$POLL_ATTEMPTS"
+              if check_sessions "$target_desc"; then
+                FOUND=1
+                echo "  Session detected for $name"
+                break
+              fi
+              sleep "$POLL_INTERVAL"
+            done
+
+            if [[ "$FOUND" -eq 1 && "$REQUIRE_SEMANTICS" -eq 1 ]]; then
+              echo "--- Checking divergence verdict semantics ---"
+              if ! check_divergence_semantics "$name"; then
+                SEMANTIC_OK=0
+              fi
+            fi
+
+            echo "--- Stopping trigger ---"
+            kill "$TPID" 2>/dev/null || true
+            wait "$TPID" 2>/dev/null || true
+
+            echo "--- Running cleanup ---"
+            python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
+
+            if [[ "$FOUND" -eq 1 && "$SEMANTIC_OK" -eq 1 ]]; then
+              echo "PASS: $name - session detected"
+              SCENARIOS_PASS=$((SCENARIOS_PASS + 1))
+            elif [[ "$REQUIRE_SEMANTICS" -eq 1 ]]; then
+              echo "FAIL: $name - divergence semantics not satisfied"
+              SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+              SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
+            else
+              echo "WARN: $name - no session detected (non-fatal in CI)"
+              SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+            fi
+
+            sleep "$COOLDOWN"
+          }
+
+          echo "=== Divergence Verdict E2E Suite ==="
+          echo "Agent type: $AGENT_TYPE"
+          echo "Trigger duration: ${TRIGGER_DURATION}s"
+          echo "(Pure CVE detection scenarios run in edamame_posture's"
+          echo " security CI -- see run_cve_detection.sh + check_gate.py)"
+          echo ""
+
+          echo "--- Starting packet capture ---"
+          "$CLI" rpc start_capture 2>&1 || echo "WARN: start_capture failed"
+          sleep 10
+          echo "--- Capture diagnostics ---"
+          "$CLI" rpc get_capture_status 2>/dev/null | head -c 500 || echo "get_capture_status unavailable"
+          echo ""
+
+          # Plugin CI exercises only the two scenarios that require a
+          # plugin-pushed behavioral model (and therefore cannot be
+          # validated by edamame_posture's daemon-only security suite,
+          # which has no model on the daemon). The full vulnerability
+          # detector matrix lives in edamame_posture's security CI -- see
+          # tests/security/run_cve_detection.sh and the release gate in
+          # tests/security/check_gate.py.
+          run_scenario "divergence"  "1.0.0.1"
+          run_scenario "goal_drift"  "1.1.1.1"
+
+          echo ""
+          echo "=========================================="
+          echo "Divergence Verdict Suite Summary"
+          echo "  PASS: $SCENARIOS_PASS"
+          echo "  WARN: $SCENARIOS_FAIL"
+          echo "  SKIP: $SCENARIOS_SKIP"
+          echo "  HARD_FAIL: $SCENARIOS_HARD_FAIL"
+          echo "=========================================="
+
+          python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
+          if [ "$SCENARIOS_HARD_FAIL" -gt 0 ]; then
+            exit 1
+          fi
+
+      # ── Stop MCP server ─────────────────────────────────────────
+
+      - name: Stop daemon (Unix)
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          sudo "$EDAMAME_POSTURE" stop 2>/dev/null || true
+          echo "Daemon stopped"
+
+      - name: Stop daemon (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          "$EDAMAME_POSTURE" stop 2>/dev/null || true
+          echo "Daemon stopped"
+
+      # ── Uninstall ────────────────────────────────────────────────
+
+      - name: Uninstall (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Running uninstall.sh ---"
+          bash setup/uninstall.sh
+          echo "--- Uninstall completed ---"
+
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Running uninstall.ps1 ---"
+          & "$PWD\setup\uninstall.ps1"
+          Write-Host "--- Uninstall completed ---"
+
+      # ── Verify uninstall ─────────────────────────────────────────
+
+      - name: Verify uninstall (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Verifying uninstall ---"
+          FAIL=0
+          if [ -d "$INSTALL_ROOT" ]; then
+            echo "FAIL: install dir still exists: $INSTALL_ROOT"
+            FAIL=1
+          else
+            echo "  OK: install dir removed"
+          fi
+
+          if [ -f "$GLOBAL_MCP" ]; then
+            # The edamame server block under `mcp_servers:` must be gone. Match the
+            # indented `edamame:` key line specifically (the `command:` value still
+            # references hermes_edamame_mcp.mjs but never as a YAML `edamame:` key).
+            if grep -qE '^[[:space:]]+edamame:[[:space:]]*$' "$GLOBAL_MCP"; then
+              echo "FAIL: edamame entry still in Hermes config"
+              FAIL=1
+            else
+              echo "  OK: edamame entry removed from Hermes config"
+            fi
+          else
+            echo "  OK: Hermes config file removed or never existed"
+          fi
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "--- Uninstall verified ---"
+
+      - name: Verify uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Verifying uninstall ---"
+          $fail = $false
+          if (Test-Path $env:INSTALL_ROOT) {
+            Write-Host "FAIL: install dir still exists: $env:INSTALL_ROOT"
+            $fail = $true
+          } else {
+            Write-Host "  OK: install dir removed"
+          }
+          if (Test-Path $env:GLOBAL_MCP) {
+            $raw = Get-Content -Raw $env:GLOBAL_MCP
+            if ($raw -match "(?m)^\s+edamame:\s*$") {
+              Write-Host "FAIL: edamame entry still in Hermes config"
+              $fail = $true
+            } else {
+              Write-Host "  OK: edamame entry removed from Hermes config"
+            }
+          } else {
+            Write-Host "  OK: Hermes config file removed or never existed"
+          }
+          if ($fail) { exit 1 }
+          Write-Host "--- Uninstall verified ---"
+
+      # ── Slack alert ──────────────────────────────────────────────
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: "C072J0U9TH7"
+          slack-message: |
+            *edamame_hermes Provisioning CI Failed*
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            OS: ${{ matrix.os }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true

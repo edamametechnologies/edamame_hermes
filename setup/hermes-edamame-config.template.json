@@ -1,0 +1,44 @@
+{
+  "workspace_root": "__WORKSPACE_ROOT__",
+  "hermes_sessions_root": "~/.hermes/sessions",
+  "agent_type": "hermes",
+  "agent_instance_id": "__DEFAULT_AGENT_INSTANCE_ID__",
+  "transcript_project_hints": [
+    "__WORKSPACE_BASENAME__",
+    "edamame-hermes-workspace"
+  ],
+  "transcript_limit": 6,
+  "transcript_recency_hours": 48,
+  "transcript_active_window_minutes": 5,
+  "state_dir": "__STATE_DIR__",
+  "host_kind": "__DEFAULT_HOST_KIND__",
+  "posture_cli_command": "__DEFAULT_POSTURE_CLI_COMMAND__",
+  "edamame_mcp_endpoint": "http://127.0.0.1:3000/mcp",
+  "edamame_mcp_psk_file": "__EDAMAME_MCP_PSK_FILE__",
+  "divergence_interval_secs": 120,
+  "verdict_history_limit": 10,
+  "hermes_llm_hosts": [
+    "api.anthropic.com:443",
+    "api.openai.com:443",
+    "openrouter.ai:443",
+    "api.nousresearch.com:443",
+    "inference.nousresearch.com:443",
+    "amazonaws.com:443",
+    "asn:CLOUDFLARENET",
+    "asn:AMAZON"
+  ],
+  "scope_parent_paths": [
+    "*/hermes",
+    "*/bin/hermes",
+    "*/node",
+    "*/node_modules/.bin/hermes",
+    "*/hermes.exe",
+    "*/hermes.cmd",
+    "*/WindowsApps/Hermes*",
+    "*/Program Files/WindowsApps/Hermes*",
+    "*/node.exe",
+    "*/.local/bin/hermes",
+    "*/hermes_edamame_mcp.mjs"
+  ],
+  "scope_grandparent_paths": []
+}

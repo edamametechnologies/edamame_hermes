@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "edamame": {
+      "type": "stdio",
+      "command": "__NODE_BIN__",
+      "args": [
+        "__PACKAGE_ROOT__/bridge/hermes_edamame_mcp.mjs",
+        "--config",
+        "__CONFIG_PATH__"
+      ]
+    }
+  }
+}

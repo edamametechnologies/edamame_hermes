@@ -1,0 +1,92 @@
+name: Sign PowerShell scripts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'setup/**'
+      - '.github/workflows/sign_windows_scripts.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    name: Sign install.ps1 with Authenticode
+    runs-on: vm-runner-windows
+    environment: signing
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          edamame_user: ${{ vars.EDAMAME_POSTURE_USER }}
+          edamame_domain: ${{ vars.EDAMAME_POSTURE_DOMAIN }}
+          edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
+          edamame_id: ${{ github.run_id }}
+          checkout: true
+          packet_capture: true
+          vulnerability_detection: true
+          vulnerability_detection_interval: "60"
+          agentic_mode: analyze
+          agentic_provider: edamame
+          agentic_interval: 600
+        env:
+          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
+
+      - name: Install AzureSignTool
+        run: |
+          if (-not (dotnet tool list --global | Select-String -Pattern "AzureSignTool")) {
+            dotnet tool install --global AzureSignTool
+          }
+
+      - name: Sign install.ps1
+        run: |
+          AzureSignTool sign -kvt ${{ secrets.AZURE_SIGN_TENANT_ID }} -kvu ${{ secrets.AZURE_SIGN_KEY_VAULT_URI }} -kvi ${{ secrets.AZURE_SIGN_CLIENT_ID }} -kvs ${{ secrets.AZURE_SIGN_CLIENT_SECRET }} -kvc ${{ secrets.AZURE_SIGN_CERT_NAME }} -tr http://timestamp.digicert.com -v ./setup/install.ps1
+
+      - uses: KamaranL/add-signtool-action@v1
+        id: signtool
+
+      - name: Verify signature
+        run: |
+          signtool verify /v /pa ./setup/install.ps1
+
+      - name: Commit signed script
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add setup/install.ps1
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Sign setup/install.ps1 with Authenticode [skip ci]"
+            git push origin main
+          } else {
+            Write-Host "No signature changes to commit"
+          }
+
+      - name: EDAMAME Posture vulnerability gate
+        if: always()
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          dump_vulnerability_findings: true
+          exit_on_vulnerability_findings: true
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: "C072J0U9TH7"
+          slack-message: |
+            *edamame_hermes Script Signing Failed*
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true

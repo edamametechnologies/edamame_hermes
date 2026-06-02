@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+*.err
+.DS_Store
+__pycache__/
+.cursor/
+# .hermes-plugin/ is intentionally tracked (Hermes plugin manifest)
