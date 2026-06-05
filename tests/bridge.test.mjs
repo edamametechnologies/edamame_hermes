@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { readTextFileWithRetry } from "../service/config.mjs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
@@ -374,7 +375,7 @@ test("control center pairing stores PSK and updates config", async () => {
 
   const payload = response.result.structuredContent;
   const storedPsk = await fs.readFile(config.edamameMcpPskFile, "utf8");
-  const storedConfig = JSON.parse(await fs.readFile(config.configPath, "utf8"));
+  const storedConfig = JSON.parse(await readTextFileWithRetry(config.configPath));
 
   assert.equal(storedPsk.trim(), "pairing-secret");
   assert.equal(storedConfig.host_kind, "edamame_posture");
@@ -469,7 +470,7 @@ test("control center can auto-pair a local posture host", { skip: process.platfo
 
   const payload = response.result.structuredContent;
   const storedPsk = await fs.readFile(config.edamameMcpPskFile, "utf8");
-  const storedConfig = JSON.parse(await fs.readFile(config.configPath, "utf8"));
+  const storedConfig = JSON.parse(await readTextFileWithRetry(config.configPath));
 
   assert.equal(storedPsk.trim(), config.postureFixture.generatedPsk);
   assert.equal(storedConfig.host_kind, "edamame_posture");

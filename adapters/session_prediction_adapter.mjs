@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { sha256 } from "../service/config.mjs";
+import { sha256, readTextFileWithRetry } from "../service/config.mjs";
 import {
   collectExtraRawishSessions,
   latestExtraSourceMtimeMs,
@@ -862,7 +862,7 @@ export async function collectTranscriptSessions(config, options = {}) {
     if (!sourcePath) continue;
     let rawText;
     try {
-      rawText = await fs.readFile(sourcePath, "utf8");
+      rawText = await readTextFileWithRetry(sourcePath);
     } catch (_error) {
       continue;
     }

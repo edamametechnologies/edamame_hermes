@@ -321,9 +321,29 @@ export async function ensureDirectory(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
+export async function readTextFileWithRetry(filePath, encoding = "utf8") {
+  // Windows briefly locks a just-written file (Defender / search indexer / lazy
+  // handle release), surfacing as EBUSY/EPERM on the next open. Retry with a
+  // short backoff so freshly-written transcript/config reads survive that window.
+  let lastError;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      return await fs.readFile(filePath, encoding);
+    } catch (error) {
+      if (error && (error.code === "EBUSY" || error.code === "EPERM")) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 30 * (attempt + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 export async function readJsonFile(filePath, fallback = null) {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
+    const raw = await readTextFileWithRetry(filePath);
     return JSON.parse(raw);
   } catch (_error) {
     return fallback;
