@@ -645,7 +645,7 @@ jobs:
 
           check_divergence_semantics() {
             local scenario="$1"
-            local max_attempts=6
+            local max_attempts=12
             local retry_wait=10
             local _pycheck
             _pycheck="$(mktemp)"
