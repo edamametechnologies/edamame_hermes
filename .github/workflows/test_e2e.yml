@@ -94,6 +94,7 @@ jobs:
             echo "FAIL: could not generate PSK (got: '$PSK')"
             exit 1
           fi
+          echo "::add-mask::$PSK"
           echo "EDAMAME_PSK=$PSK" >> "$GITHUB_ENV"
           echo "PSK generated (${#PSK} chars)"
 
@@ -139,7 +140,7 @@ jobs:
             -H "Authorization: Bearer $EDAMAME_PSK" \
             -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-test","version":"1.0"}}}')
           INIT=$(echo "$INIT_RAW" | sed 's/^data: //')
-          echo "$INIT" | head -c 500
+          printf '%.500s\n' "$INIT"
           echo ""
 
           MCP_SESSION=$(grep -i 'mcp-session-id' "$HDRS" 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1 || true)
@@ -151,7 +152,7 @@ jobs:
           echo "--- tools/list ---"
           TOOLS_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
           TOOLS=$(echo "$TOOLS_RAW" | sed 's/^data: //')
-          echo "$TOOLS" | head -c 500
+          printf '%.500s\n' "$TOOLS"
           echo ""
           if echo "$TOOLS" | grep -q '"tools"'; then
             echo "tools/list OK"
@@ -162,7 +163,7 @@ jobs:
           echo "--- tools/call get_score ---"
           SCORE_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
           SCORE=$(echo "$SCORE_RAW" | sed 's/^data: //')
-          echo "$SCORE" | head -c 500
+          printf '%.500s\n' "$SCORE"
           echo ""
           echo "MCP server verified"
 
@@ -390,7 +391,7 @@ jobs:
             echo "INFO: get_transcript_observer_status not present on this posture build; skipping observer probe"
             exit 0
           fi
-          echo "$STATUS_RAW" | head -c 800
+          printf '%.800s\n' "$STATUS_RAW"
           echo ""
           if echo "$STATUS_RAW" | grep -q "\"agent_type\":\"$OBSERVER_AGENT_TYPE\""; then
             echo "OK: $OBSERVER_AGENT_TYPE row present in observer status"
@@ -420,7 +421,7 @@ jobs:
           if echo "$HEALTH_RAW" | grep -qiE "unknown.*method|method.*not found"; then
             echo "INFO: get_agent_plugin_health not present on this posture build; skipping split-healthcheck probe"
           else
-            echo "$HEALTH_RAW" | head -c 800
+            printf '%.800s\n' "$HEALTH_RAW"
             echo ""
             if echo "$HEALTH_RAW" | grep -q '"mcp_tools"' && echo "$HEALTH_RAW" | grep -q '"observer"'; then
               echo "OK: split healthcheck contains mcp_tools and observer sections"
