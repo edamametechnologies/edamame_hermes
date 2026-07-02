@@ -1,7 +1,7 @@
 {
   "name": "edamame",
   "description": "Runtime behavioral monitoring for Hermes. Bridges session transcripts to the EDAMAME Security two-plane divergence engine for continuous developer workstation protection.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "EDAMAME Technologies",
     "email": "info@edamame.tech"
