@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Runtime behavioral monitoring for AI coding agents. Bridges session transcripts to the EDAMAME Security two-plane divergence engine.",
-    "version": "1.6.0"
+    "version": "1.6.1"
   },
   "plugins": [
     {
       "name": "edamame",
       "source": "./",
       "description": "Runtime behavioral monitoring for Hermes. Bridges session transcripts to the EDAMAME Security two-plane divergence engine for continuous developer workstation protection.",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "author": {
         "name": "EDAMAME Technologies",
         "email": "info@edamame.tech"
