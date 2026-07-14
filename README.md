@@ -1,6 +1,6 @@
 # EDAMAME for Hermes
 
-EDAMAME for Hermes bridges Nous Research's Hermes Agent reasoning artifacts to the local EDAMAME Security host so EDAMAME can correlate declared intent against observed system activity.
+EDAMAME Security monitors Hermes **automatically**: its host-side transcript observer runs two-plane divergence detection the moment Hermes is discovered on disk, with **no plugin required** (see [Observer vs plugin](#observer-vs-plugin-what-provides-the-security) below). This package is a cooperative enhancement — it extends that coverage to off-host Hermes sessions (including the SQLite+FTS5 store) and adds turnkey MCP onboarding; it never provides, or can weaken, that guarantee.
 
 This package keeps the same workstation pattern as the Cursor and Claude packages:
 

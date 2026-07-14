@@ -5,15 +5,15 @@
     "email": "info@edamame.tech"
   },
   "metadata": {
-    "description": "Runtime behavioral monitoring for AI coding agents. Bridges session transcripts to the EDAMAME Security two-plane divergence engine.",
-    "version": "1.6.1"
+    "description": "EDAMAME Security integrations for AI coding agents. EDAMAME's host-side observer runs two-plane divergence detection automatically -- no plugin required; these plugins add off-host coverage, in-agent posture/verdict views, safety-floor guardrails, and turnkey onboarding.",
+    "version": "1.7.0"
   },
   "plugins": [
     {
       "name": "edamame",
       "source": "./",
-      "description": "Runtime behavioral monitoring for Hermes. Bridges session transcripts to the EDAMAME Security two-plane divergence engine for continuous developer workstation protection.",
-      "version": "1.6.1",
+      "description": "EDAMAME Security for Hermes. EDAMAME's host-side observer runs two-plane divergence detection automatically -- no plugin required; this plugin adds off-host coverage plus in-agent posture and divergence verdicts, safety-floor guardrails, and turnkey MCP onboarding.",
+      "version": "1.7.0",
       "author": {
         "name": "EDAMAME Technologies",
         "email": "info@edamame.tech"
