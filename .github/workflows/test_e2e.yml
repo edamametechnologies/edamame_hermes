@@ -348,7 +348,7 @@ jobs:
           EDAMAME_MCP_ENDPOINT: http://127.0.0.1:3000/mcp
         run: |
           echo "--- Running healthcheck ---"
-          node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json || true
+          node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json
           echo "--- Healthcheck completed ---"
 
       # ── Intent E2E (full LLM-backed) ───────────────────────────

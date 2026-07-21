@@ -50,6 +50,8 @@ bash tests/e2e_inject_intent.sh
 
 The `test_e2e.yml` workflow runs this test on Ubuntu after installing
 `edamame_posture`, configuring agentic LLM, and provisioning the plugin.
+The `healthcheck_cli.mjs` step is a hard gate (non-zero exit fails the job);
+do not wrap it in `|| true`.
 
 ## Full Cross-Agent E2E Suite
 
