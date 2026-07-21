@@ -1,3 +1,0 @@
-> **ARCHIVED (EDAMAME 1.7.0):** Per-repo Level-2 E2E (`test_e2e.yml`) no longer release-gates. Use [agent_security fleet monitoring](https://github.com/edamametechnologies/agent_security/blob/main/tests/e2e/E2E_TESTS.md#3-fleet-monitoring-e2e-run_fleet_monitoringpy) instead.
-
-
