@@ -1,6 +1,6 @@
 # EDAMAME for Hermes
 
-> **ARCHIVED (EDAMAME 1.7.0):** Level-2 agent plugin distribution is retired. Host-side transcript observation is the default monitoring path; prevention is via **nono** / **srt** governance harnesses. The remaining release gate is [agent_security fleet monitoring](https://github.com/edamametechnologies/agent_security/blob/main/.github/workflows/agent_monitoring_e2e.yml).
+> **ARCHIVED (EDAMAME 1.7.0):** Level-2 agent plugin distribution is retired. Host-side transcript observation is the default monitoring path; prevention is via **nono** / **srt** governance harnesses. The remaining release gate is [edamame_posture fleet monitoring](https://github.com/edamametechnologies/edamame_posture_cli/blob/main/.github/workflows/agent_monitoring_e2e.yml).
 
 EDAMAME Security monitors Hermes **automatically**: its host-side transcript observer runs two-plane divergence detection the moment Hermes is discovered on disk, with **no plugin required** (see [Observer vs plugin](#observer-vs-plugin-what-provides-the-security) below). This package is a cooperative enhancement — it extends that coverage to off-host Hermes sessions (including the SQLite+FTS5 store) and adds turnkey MCP onboarding; it never provides, or can weaken, that guarantee.
 

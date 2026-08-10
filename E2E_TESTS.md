@@ -1,4 +1,4 @@
-> **ARCHIVED (EDAMAME 1.7.0):** Per-repo Level-2 E2E (`test_e2e.yml`) no longer release-gates. Use [agent_security fleet monitoring](https://github.com/edamametechnologies/agent_security/blob/main/tests/e2e/E2E_TESTS.md#3-fleet-monitoring-e2e-run_fleet_monitoringpy) instead.
+> **ARCHIVED (EDAMAME 1.7.0):** Per-repo Level-2 E2E (`test_e2e.yml`) no longer release-gates. Use [edamame_posture fleet monitoring](https://github.com/edamametechnologies/edamame_posture_cli/blob/main/tests/e2e/E2E_TESTS.md) instead.
 
 # Hermes Intent E2E Test
 
@@ -57,9 +57,9 @@ do not wrap it in `|| true`.
 
 ## Full Cross-Agent E2E Suite
 
-The complete E2E harness (intent injection for all three agents plus CVE/divergence
+The complete E2E harness (intent injection for all supported agents plus CVE/divergence
 scenarios) lives in the
-[agent_security](https://github.com/edamametechnologies/agent_security) repo
+[edamame_posture](https://github.com/edamametechnologies/edamame_posture_cli) repo
 under `tests/e2e/`. Run triggers with `--agent-type hermes`. See
-[agent_security E2E_TESTS.md](https://github.com/edamametechnologies/agent_security/blob/main/tests/e2e/E2E_TESTS.md)
+[edamame_posture E2E_TESTS.md](https://github.com/edamametechnologies/edamame_posture_cli/blob/main/tests/e2e/E2E_TESTS.md)
 for the full architecture.
