@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "EDAMAME Security integrations for AI coding agents. EDAMAME's host-side observer runs two-plane divergence detection automatically -- no plugin required; these plugins add off-host coverage, in-agent posture/verdict views, safety-floor guardrails, and turnkey onboarding.",
-    "version": "1.8.1"
+    "version": "1.8.2"
   },
   "plugins": [
     {
       "name": "edamame",
       "source": "./",
       "description": "EDAMAME Security for Hermes. EDAMAME's host-side observer runs two-plane divergence detection automatically -- no plugin required; this plugin adds off-host coverage plus in-agent posture and divergence verdicts, safety-floor guardrails, and turnkey MCP onboarding.",
-      "version": "1.8.1",
+      "version": "1.8.2",
       "author": {
         "name": "EDAMAME Technologies",
         "email": "info@edamame.tech"
