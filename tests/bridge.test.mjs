@@ -5,6 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { readTextFileWithRetry } from "../service/config.mjs";
+import { makeEdamameClient, closeEdamameClient } from "../bridge/edamame_client.mjs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
@@ -1356,4 +1357,58 @@ test("healthcheck CLI emits auth failure details for invalid PSK", async () => {
     assert.equal(authCheck?.detail?.reason, "edamame_mcp_auth_failed");
     assert.match(authCheck?.detail?.summary || "", /PSK/i);
   });
+});
+
+test("closeEdamameClient ends the MCP session it opened", async () => {
+  const deleted = [];
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/mcp") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    if (request.method === "DELETE") {
+      deleted.push(String(request.headers["mcp-session-id"] || ""));
+      response.writeHead(200);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => {
+      body += String(chunk);
+    });
+    request.on("end", () => {
+      const message = JSON.parse(body || "{}");
+      if (message.method === "initialize") {
+        response.writeHead(200, { "Content-Type": "application/json", "Mcp-Session-Id": "sess-close-1" });
+        response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2025-11-25" } }));
+      } else if (message.id === undefined) {
+        response.writeHead(202);
+        response.end();
+      } else {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "{}" }] } }));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "edamame-close-"));
+  try {
+    const pskFile = path.join(tempDir, "psk");
+    await fs.writeFile(pskFile, "test-psk-0123456789abcdef0123456789abcdef");
+    const config = {
+      edamameMcpEndpoint: `http://127.0.0.1:${server.address().port}/mcp`,
+      edamameMcpPskFile: pskFile,
+    };
+    const client = await makeEdamameClient(config);
+    await client.invoke("get_score", {});
+    await closeEdamameClient();
+    assert.deepEqual(deleted, ["sess-close-1"]);
+    // Nothing left to close.
+    await closeEdamameClient();
+    assert.equal(deleted.length, 1);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

@@ -288,6 +288,33 @@ class McpHttpClient {
       throw error;
     }
   }
+
+  // Ends the MCP session (the Streamable HTTP DELETE), so a short-lived
+  // process does not leave one open on EDAMAME until its idle timeout. The
+  // server ends idle sessions on its own, so a failed DELETE is not an error.
+  async close(timeoutMs = 5_000) {
+    const sessionId = this.sessionId;
+    this.sessionId = null;
+    this.protocolVersion = null;
+    this.initPromise = null;
+    if (!sessionId) return;
+    const fetchImpl = requireFetch();
+    const abortController = new AbortController();
+    const timer = setTimeout(() => abortController.abort(), timeoutMs);
+    try {
+      const headers = this.headers();
+      headers["Mcp-Session-Id"] = sessionId;
+      await fetchImpl(this.endpoint, {
+        method: "DELETE",
+        headers,
+        signal: abortController.signal,
+      });
+    } catch {
+      // Nothing to do: the session times out on the server.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }
 
 let cachedClient = null;
@@ -308,4 +335,12 @@ export async function makeEdamameClient(config) {
       return cachedClient.callTool(toolName, args, timeoutMs);
     },
   };
+}
+
+// Ends the cached client's MCP session; for one-shot processes such as the
+// healthcheck CLI.
+export async function closeEdamameClient() {
+  const client = cachedClient;
+  cachedClient = null;
+  if (client) await client.close();
 }

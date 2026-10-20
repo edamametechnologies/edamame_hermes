@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadConfig, summarizeJson } from "./config.mjs";
 import { runHealthcheck } from "./health.mjs";
+import { closeEdamameClient } from "../bridge/edamame_client.mjs";
 
 function parseCliArgs(argv) {
   const args = { json: false, strict: false, configPath: null };
@@ -23,7 +24,13 @@ function parseCliArgs(argv) {
 async function main() {
   const args = parseCliArgs(process.argv.slice(2));
   const config = await loadConfig({ configPath: args.configPath });
-  const result = await runHealthcheck(config, { strict: args.strict });
+  let result;
+  try {
+    result = await runHealthcheck(config, { strict: args.strict });
+  } finally {
+    // One run, one session: end it rather than leave it to the idle timeout.
+    await closeEdamameClient();
+  }
 
   if (args.json) {
     process.stdout.write(`${summarizeJson(result)}\n`);
