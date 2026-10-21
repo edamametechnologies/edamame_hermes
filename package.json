@@ -1,6 +1,6 @@
 {
   "name": "edamame",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "EDAMAME Security plugin for Hermes - runtime behavioral monitoring",
   "type": "module",
   "engines": {
