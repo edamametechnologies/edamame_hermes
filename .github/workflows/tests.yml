@@ -177,16 +177,12 @@ jobs:
           dump_vulnerability_findings: true
           exit_on_vulnerability_findings: true
 
-      - name: Slack alert on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          channel-id: "C072J0U9TH7"
-          slack-message: |
-            *edamame_hermes CI Failed (${{ matrix.os }})*
-            Repository: ${{ github.repository }}
-            Branch: ${{ github.ref }}
-            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        continue-on-error: true
+  notify:
+    name: Slack alert
+    needs: [test]
+    if: always() && github.event_name != 'pull_request'
+    uses: edamametechnologies/.github/.github/workflows/slack-notify.yml@main
+    with:
+      results: ${{ toJSON(needs) }}
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
